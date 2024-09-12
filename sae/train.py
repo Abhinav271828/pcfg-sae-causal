@@ -42,12 +42,14 @@ def train(args):
 
             recon_loss = criterion(recon, activation)
 
-            reg_loss = args.alpha * torch.norm(latent, p=1) if args.alpha else 0
+            reg_loss = torch.norm(latent, p=1) if args.alpha else 0
 
             recon_grad = train_data.get_recon_grad(seq, recon)
-            causal_loss = args.beta * criterion(recon_grad, grad)
+            causal_loss = criterion(recon_grad, grad)
 
-            loss = recon_loss + reg_loss + causal_loss
+            loss = recon_loss + \
+                   reg_loss * args.alpha + \
+                   causal_loss * args.beta
 
             loss.backward()
             optimizer.step()
