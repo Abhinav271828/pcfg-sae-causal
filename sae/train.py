@@ -48,7 +48,7 @@ def train(args):
             causal_loss = criterion(recon_grad, grad)
 
             loss = recon_loss + \
-                   reg_loss * args.alpha + \
+                   reg_loss * args.alpha if args.alpha else 0 + \
                    causal_loss * args.beta
 
             loss.backward()
