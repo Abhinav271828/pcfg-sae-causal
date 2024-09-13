@@ -18,7 +18,9 @@ def train(args):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion_recon = nn.MSELoss()
-    criterion_causal = nn.CosineEmbeddingLoss() if args.causal_loss == 'cosine' else nn.MSELoss()
+    criterion_causal = (lambda x1, x2: \
+                            nn.CosineEmbeddingLoss()(x1, x2, torch.ones(x1.shape[0]))) if args.causal_loss == 'cosine' \
+                  else (nn.MSELoss())
 
     # Train the SAE
     wandb.init(project="pcfg-sae-causal")
@@ -46,8 +48,7 @@ def train(args):
             reg_loss = torch.norm(latent, p=1) if args.alpha else 0
 
             recon_grad = train_data.get_recon_grad(seq, recon)
-            causal_loss = criterion_causal(recon_grad, grad, -torch.ones(grad.size(0))) if args.causal_loss == 'cosine' \
-                     else criterion_causal(recon_grad, grad)
+            causal_loss = criterion_causal(recon_grad, grad)
 
             loss = recon_loss + \
                    causal_loss * args.beta
@@ -76,19 +77,21 @@ def train(args):
                         activation = activation / norm.unsqueeze(-1)
                     latent, recon = model(activation)
 
-                    recon_loss = criterion_recon(recon, activation)
+                    val_recon_loss = criterion_recon(recon, activation)
 
                     recon_grad = val_data.get_recon_grad(seq, recon)
-                    causal_loss = criterion_recon(recon_grad, grad)
+                    val_causal_loss = criterion_causal(recon_grad, grad)
 
-                    val_loss += (recon_loss.item() + causal_loss.item())
+                    val_loss += (val_recon_loss.item() + val_causal_loss.item() * args.beta) / args.val_iters
                     val_it += 1
                 model.train()
-                wandb.log({'recon_loss': recon_loss.item(),
-                           'reg_loss'  : reg_loss.item() if args.alpha else 0,
+                wandb.log({'recon_loss' : recon_loss.item(),
+                           'reg_loss'   : reg_loss.item() if args.alpha else 0,
                            'causal_loss': causal_loss.item(),
-                           'train_loss': train_loss,
-                           'val_loss'  : val_loss   / args.val_iters})
+                           'train_loss' : train_loss,
+                           'val_recon_loss' : val_recon_loss,
+                           'val_causal_loss': val_causal_loss,
+                           'val_loss'       : val_loss})
 
                 if args.val_patience and val_loss > prev_loss:
                     loss_increasing += 1
@@ -96,11 +99,11 @@ def train(args):
                 else:
                     loss_increasing = 0
                     prev_loss = val_loss
-
-                wandb.log({'recon_loss': recon_loss.item(),
-                           'reg_loss'  : reg_loss.item() if args.alpha else 0,
+            else:
+                wandb.log({'recon_loss' : recon_loss.item(),
+                           'reg_loss'   : reg_loss.item() if args.alpha else 0,
                            'causal_loss': causal_loss.item(),
-                           'train_loss': train_loss})
+                           'train_loss' : train_loss})
             train_it += 1
 
     i = 0
