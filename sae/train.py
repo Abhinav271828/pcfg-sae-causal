@@ -17,7 +17,8 @@ def train(args):
     model.train()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    criterion = nn.MSELoss()
+    criterion_recon = nn.MSELoss()
+    criterion_causal = nn.CosineEmbeddingLoss() if args.causal_loss == 'cosine' else nn.MSELoss()
 
     # Train the SAE
     wandb.init(project="pcfg-sae-causal")
@@ -40,12 +41,13 @@ def train(args):
                 activation = activation / norm.unsqueeze(-1)
             latent, recon = model(activation)
 
-            recon_loss = criterion(recon, activation)
+            recon_loss = criterion_recon(recon, activation)
 
             reg_loss = torch.norm(latent, p=1) if args.alpha else 0
 
             recon_grad = train_data.get_recon_grad(seq, recon)
-            causal_loss = criterion(recon_grad, grad)
+            causal_loss = criterion_causal(recon_grad, grad, -torch.ones(grad.size(0))) if args.causal_loss == 'cosine' \
+                     else criterion_causal(recon_grad, grad)
 
             loss = recon_loss + \
                    causal_loss * args.beta
@@ -74,10 +76,10 @@ def train(args):
                         activation = activation / norm.unsqueeze(-1)
                     latent, recon = model(activation)
 
-                    recon_loss = criterion(recon, activation)
+                    recon_loss = criterion_recon(recon, activation)
 
                     recon_grad = val_data.get_recon_grad(seq, recon)
-                    causal_loss = criterion(recon_grad, grad)
+                    causal_loss = criterion_recon(recon_grad, grad)
 
                     val_loss += (recon_loss.item() + causal_loss.item())
                     val_it += 1
