@@ -82,11 +82,12 @@ def train(args):
                     recon_loss = criterion(recon, activation)
 
                     closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
-                    target_activn = activation[closest]
-                    target_logits = logits[closest]
 
-                    intervened_activn = args.step * (target_activn - activation) + activation
+                    target_latent = latent[closest]
+                    intervened_activn = model.decoder(args.step * (target_latent - latent) + latent)
                     intervened_logits = train_data.intervene(seq, intervened_activn)
+
+                    target_logits = logits[closest]
                     causal_loss = criterion(intervened_logits,
                                             args.step * (target_logits - logits) + logits)
 
