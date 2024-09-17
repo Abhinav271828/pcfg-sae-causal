@@ -71,7 +71,7 @@ def train(args):
                 model.eval()
                 val_loss = 0
                 val_it = 0
-                for activation, grad, seq in val_data:
+                for activation, logits, seq in val_data:
                     if val_it > args.val_iters: break
                     activation = activation.to(device)
                     if 'input' in args.norm:
