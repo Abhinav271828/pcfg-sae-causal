@@ -30,7 +30,7 @@ def train(args):
         loss_increasing = 0
 
         train_it = 0
-        for activation, grad, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
+        for activation, logits, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
             if train_it > args.train_iters: break
 
             activation = activation.to(device)
@@ -42,12 +42,18 @@ def train(args):
 
             recon_loss = criterion(recon, activation)
 
-            reg_loss = args.alpha * torch.norm(latent, p=1) if args.alpha else 0
+            reg_loss = torch.norm(latent, p=1) if args.alpha else 0
 
-            recon_grad = train_data.get_recon_grad(seq, recon)
-            causal_loss = args.beta * criterion(recon_grad, grad)
+            closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
+            target_activn = activation[closest]
+            target_logits = logits[closest]
 
-            loss = recon_loss + reg_loss + causal_loss
+            intervened_activn = args.step * (target_activn - activation) + activation
+            intervened_logits = train_data.intervene(seq, intervened_activn)
+            causal_loss = criterion(intervened_logits,
+                                    args.step * (target_logits - logits) + logits)
+
+            loss = recon_loss + reg_loss * args.alpha + causal_loss * args.beta
 
             loss.backward()
             optimizer.step()
@@ -74,15 +80,11 @@ def train(args):
 
                     recon_loss = criterion(recon, activation)
 
-                    recon_grad = val_data.get_recon_grad(seq, recon)
-                    causal_loss = criterion(recon_grad, grad)
-
-                    val_loss += (recon_loss.item() + causal_loss.item())
+                    val_loss += recon_loss.item()
                     val_it += 1
                 model.train()
                 wandb.log({'recon_loss': recon_loss.item(),
                            'reg_loss'  : reg_loss.item() if args.alpha else 0,
-                           'causal_loss': causal_loss.item(),
                            'train_loss': train_loss,
                            'val_loss'  : val_loss   / args.val_iters})
 
@@ -95,7 +97,6 @@ def train(args):
 
                 wandb.log({'recon_loss': recon_loss.item(),
                            'reg_loss'  : reg_loss.item() if args.alpha else 0,
-                           'causal_loss': causal_loss.item(),
                            'train_loss': train_loss})
             train_it += 1
 

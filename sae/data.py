@@ -67,14 +67,11 @@ class SAEData(Dataset):
         self.grad = None
         def hook_fwd(model, input, output):
             self.activation = output.detach().clone()
-        def hook_bwd(module, grad_input, grad_output):
-            self.grad = grad_output[0].detach().clone()
         self.hook_fwd = hook_fwd
-        self.hook_bwd = hook_bwd
 
-        def recon_hook(module, input, output):
-            return self.reconstruction
-        self.recon_hook = recon_hook
+        def intervention_hook(module, input, output):
+            return self.intervention
+        self.intervention_hook = intervention_hook
 
         match self.layer_name:
             case "wte":   self.module = self.model.transformer.wte
@@ -87,7 +84,6 @@ class SAEData(Dataset):
             case "res1":  self.module = self.model.transformer.h[1]
             case "ln_f":  self.module = self.model.transformer.ln_f
         self.handle_fwd = self.module.register_forward_hook(hook_fwd)
-        self.handle_bwd = self.module.register_full_backward_hook(hook_bwd)
 
     def __len__(self):
         return len(self.dataset)
@@ -102,28 +98,27 @@ class SAEData(Dataset):
 
         activation = self.activation.squeeze(0)[self.dataset.decorator_length:self.dataset.decorator_length + int(length)]
         # [length, emb_dim]
-        grad = self.grad.squeeze(0)[self.dataset.decorator_length:self.dataset.decorator_length + int(length)]
+        logits = logits.squeeze(0)[self.dataset.decorator_length:self.dataset.decorator_length + int(length)]
 
-        return activation, grad, sequence
-
-    def get_recon_grad(self, sequence, reconstruction):
+        return activation, logits, sequence
+    
+    def intervene(self, sequence, activations):
         self.handle_fwd.remove()
 
-        length = reconstruction.shape[0]
-        self.reconstruction = torch.cat([reconstruction,
-                                         torch.zeros(128 - length, 128).to(self.device)],
-                                        dim=0).unsqueeze(0).clone().detach().requires_grad_(True)
-        self.handle_recon = self.module.register_forward_hook(self.recon_hook)
+        length = activations.shape[0]
+        self.intervention = torch.cat([activations,
+                                       torch.zeros(128 - length, 128).to(self.device)],
+                                       dim=0).unsqueeze(0)
+        self.handle_fwd = self.module.register_forward_hook(self.intervention_hook)
 
         logits = self.model(sequence.unsqueeze(0).to(self.device))
-        loss = F.cross_entropy(logits.squeeze(0)[:-1], sequence[1:])
-        loss.backward(retain_graph=True)
-        grad = self.reconstruction.grad.squeeze(0)[self.dataset.decorator_length:self.dataset.decorator_length + int(length)]
+        logits = logits.squeeze(0)[self.dataset.decorator_length:self.dataset.decorator_length + int(length)]
 
-        self.handle_recon.remove()
+        self.handle_fwd.remove()
         self.handle_fwd = self.module.register_forward_hook(self.hook_fwd)
 
-        return grad
+        return logits.squeeze(0)
+
 
 """
 GPT(
