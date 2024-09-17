@@ -43,6 +43,10 @@ The other hyperparameters are fixed; `batch_size` is 128, `lr` $10^{-5}$, `train
 
 ## Expr
 - `results/scratch/12owob2t`: Model trained on prefix Expr.
+    - 0: $k=16, h=2, \beta=100$ [cosine]
+    - 1: $k=16, h=2, \beta=1$ [MSE]
+    - 2: $\alpha=10^{-3}, h=8, \beta=1$ [cosine]
+    - 3: $\alpha=10^{-3}, h=8, \beta=1$ [MSE]
 - `results/scratch/ivq8uspe`: Model trained on postfix Expr.
 
 ## English
