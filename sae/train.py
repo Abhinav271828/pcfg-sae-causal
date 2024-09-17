@@ -53,7 +53,8 @@ def train(args):
             causal_loss = criterion(intervened_logits,
                                     args.step * (target_logits - logits) + logits)
 
-            loss = recon_loss + reg_loss * args.alpha + causal_loss * args.beta
+            loss = recon_loss + causal_loss * args.beta
+            loss += reg_loss * args.alpha if args.alpha else 0
 
             loss.backward()
             optimizer.step()
