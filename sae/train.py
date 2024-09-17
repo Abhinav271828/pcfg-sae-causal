@@ -81,12 +81,22 @@ def train(args):
 
                     recon_loss = criterion(recon, activation)
 
-                    val_loss += recon_loss.item()
+                    closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
+                    target_activn = activation[closest]
+                    target_logits = logits[closest]
+
+                    intervened_activn = args.step * (target_activn - activation) + activation
+                    intervened_logits = train_data.intervene(seq, intervened_activn)
+                    causal_loss = criterion(intervened_logits,
+                                            args.step * (target_logits - logits) + logits)
+
+                    val_loss += (recon_loss.item() + causal_loss.item() * args.beta)
                     val_it += 1
                 model.train()
                 wandb.log({'recon_loss': recon_loss.item(),
                            'reg_loss'  : reg_loss.item() if args.alpha else 0,
                            'train_loss': train_loss,
+                           'causal_loss': causal_loss.item(),
                            'val_loss'  : val_loss   / args.val_iters})
 
                 if args.val_patience and val_loss > prev_loss:
@@ -98,6 +108,7 @@ def train(args):
 
                 wandb.log({'recon_loss': recon_loss.item(),
                            'reg_loss'  : reg_loss.item() if args.alpha else 0,
+                           'causal_loss': causal_loss.item(),
                            'train_loss': train_loss})
             train_it += 1
 
