@@ -18,6 +18,7 @@ def train(args):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.MSELoss()
+    criterion_caus = nn.KLDivLoss(reduction='batchmean')
 
     # Train the SAE
     wandb.init(project="pcfg-sae-causal")
@@ -52,8 +53,8 @@ def train(args):
             intervened_logits = train_data.intervene(seq, intervened_activn)
 
             target_logits = logits[closest]
-            causal_loss = criterion(intervened_logits,
-                                    step * (target_logits - logits) + logits)
+            causal_loss = criterion_caus(F.log_softmax(intervened_logits, dim=-1),
+                                         F.softmax(step * (target_logits - logits) + logits, dim=-1))
 
             loss = recon_loss + causal_loss * args.beta
             loss += reg_loss * args.alpha if args.alpha else 0
@@ -91,8 +92,8 @@ def train(args):
                     intervened_logits = train_data.intervene(seq, intervened_activn)
 
                     target_logits = logits[closest]
-                    causal_loss = criterion(intervened_logits,
-                                            step * (target_logits - logits) + logits)
+                    causal_loss = criterion_caus(F.log_softmax(intervened_logits, dim=-1),
+                                                 F.softmax(step * (target_logits - logits) + logits, dim=-1))
 
                     val_loss += (recon_loss.item() + causal_loss.item() * args.beta)
                     val_it += 1
