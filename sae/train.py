@@ -44,14 +44,26 @@ def train(args):
 
             reg_loss = torch.norm(latent, p=1) if args.alpha else 0
 
-            closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
-            target_activn = activation[closest]
-            target_logits = logits[closest]
+            # Find random nonzero elements for each row
+            nonzero_mask = (latent != 0)
+            nonzero_counts = nonzero_mask.sum(-1)  # For each row, the number of nonzero elements
+            nonzero_indices = torch.arange(latent.size(-1)).expand_as(latent)
+            nonzero_indices_per_row = torch.where(nonzero_mask, nonzero_indices, torch.tensor(-1)) # Same shape as latent; -1 at zero positions and column number elsewhere
+            sorted_nonzero_indices_per_row = torch.argsort(nonzero_indices_per_row, dim=1, descending=True)
+            # Now the first k elements are indices of (indices of) nonzero elements, and the rest are indices of 0
+            # k depends on the row; it is the number of nonzero elements in that row
+            indices_of_indices = (torch.rand(latent.size(0)) * nonzero_counts).long() # Randomly select a nonzero index for each row
+            selected_indices = sorted_nonzero_indices_per_row[torch.arange(latent.size(0)), indices_of_indices]
 
-            intervened_activn = args.step * (target_activn - activation) + activation
-            intervened_logits = train_data.intervene(seq, intervened_activn)
-            causal_loss = criterion(intervened_logits,
-                                    args.step * (target_logits - logits) + logits)
+            # Ablate selected indices to zero
+            abl_latent = latent.clone()
+            abl_latent[torch.arange(latent.size(0)), selected_indices] = 0
+            ablated_recon = model.decoder(abl_latent)
+
+            # Compare the outputs
+            pure_logits = train_data.intervene(seq, recon)
+            abl_logits = train_data.intervene(seq, ablated_recon)
+            causal_loss = criterion(abl_logits, pure_logits)
 
             loss = recon_loss + causal_loss * args.beta
             loss += reg_loss * args.alpha if args.alpha else 0
@@ -81,14 +93,26 @@ def train(args):
 
                     recon_loss = criterion(recon, activation)
 
-                    closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
-                    target_activn = activation[closest]
-                    target_logits = logits[closest]
+                    # Find random nonzero elements for each row
+                    nonzero_mask = (latent != 0)
+                    nonzero_counts = nonzero_mask.sum(-1)  # For each row, the number of nonzero elements
+                    nonzero_indices = torch.arange(latent.size(-1)).expand_as(latent)
+                    nonzero_indices_per_row = torch.where(nonzero_mask, nonzero_indices, torch.tensor(-1)) # Same shape as latent; -1 at zero positions and column number elsewhere
+                    sorted_nonzero_indices_per_row = torch.argsort(nonzero_indices_per_row, dim=1, descending=True)
+                    # Now the first k elements are indices of (indices of) nonzero elements, and the rest are indices of 0
+                    # k depends on the row; it is the number of nonzero elements in that row
+                    indices_of_indices = (torch.rand(latent.size(0)) * nonzero_counts).long() # Randomly select a nonzero index for each row
+                    selected_indices = sorted_nonzero_indices_per_row[torch.arange(latent.size(0)), indices_of_indices]
 
-                    intervened_activn = args.step * (target_activn - activation) + activation
-                    intervened_logits = train_data.intervene(seq, intervened_activn)
-                    causal_loss = criterion(intervened_logits,
-                                            args.step * (target_logits - logits) + logits)
+                    # Ablate selected indices to zero
+                    abl_latent = latent.clone()
+                    abl_latent[torch.arange(latent.size(0)), selected_indices] = 0
+                    ablated_recon = model.decoder(abl_latent)
+
+                    # Compare the outputs
+                    pure_logits = val_data.intervene(seq, recon)
+                    abl_logits = val_data.intervene(seq, ablated_recon)
+                    causal_loss = criterion(abl_logits, pure_logits)
 
                     val_loss += (recon_loss.item() + causal_loss.item() * args.beta)
                     val_it += 1
