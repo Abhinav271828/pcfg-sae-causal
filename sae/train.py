@@ -63,7 +63,7 @@ def train(args):
             # Compare the outputs
             pure_logits = train_data.intervene(seq, recon)
             abl_logits = train_data.intervene(seq, ablated_recon)
-            causal_loss = criterion(abl_logits, pure_logits)
+            causal_loss = -criterion(abl_logits, pure_logits)
 
             loss = recon_loss + causal_loss * args.beta
             loss += reg_loss * args.alpha if args.alpha else 0
@@ -112,7 +112,7 @@ def train(args):
                     # Compare the outputs
                     pure_logits = val_data.intervene(seq, recon)
                     abl_logits = val_data.intervene(seq, ablated_recon)
-                    causal_loss = criterion(abl_logits, pure_logits)
+                    causal_loss = -criterion(abl_logits, pure_logits)
 
                     val_loss += (recon_loss.item() + causal_loss.item() * args.beta)
                     val_it += 1
