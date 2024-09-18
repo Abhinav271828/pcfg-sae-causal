@@ -117,7 +117,7 @@ class SAEData(Dataset):
         self.handle_fwd.remove()
         self.handle_fwd = self.module.register_forward_hook(self.hook_fwd)
 
-        return logits.squeeze(0)
+        return logits
 
 
 """
