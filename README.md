@@ -50,7 +50,7 @@ The other hyperparameters are fixed; `batch_size` is 128, `lr` $10^{-5}$, `train
     - 8: $k=16, h=2, \beta=1$; random step $\in [0, 1)$
     - 9: $k=16, h=2, \beta=100$; random step $\in [0, 1)$
     - 10: $k=16, h=2, \beta=1$; random step; KL
-    - 10: $k=16, h=2, \beta=100$; random step; KL
+    - 11: $k=16, h=2, \beta=100$; random step; KL
 - `results/scratch/ivq8uspe`: Model trained on postfix Expr.
 
 ## English
