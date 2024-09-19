@@ -18,7 +18,8 @@ def train(args):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.MSELoss()
-    criterion_caus = nn.KLDivLoss(reduction='batchmean')
+    criterion_caus = nn.KLDivLoss(reduction='batchmean') if args.caus == 'kl' else \
+                     nn.MSELoss()
 
     # Train the SAE
     wandb.init(project="pcfg-sae-causal")
@@ -46,7 +47,8 @@ def train(args):
             reg_loss = torch.norm(latent, p=1) if args.alpha else 0
 
             closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
-            step = torch.rand(1).item()
+            if args.step == 'random': step = torch.rand(1).item()
+            else: step = float(args.step)
 
             target_latent = latent[closest]
             intervened_activn = model.decoder(step * (target_latent - latent) + latent)
@@ -54,7 +56,9 @@ def train(args):
 
             target_logits = logits[closest]
             causal_loss = criterion_caus(F.log_softmax(intervened_logits, dim=-1),
-                                         F.softmax(step * (target_logits - logits) + logits, dim=-1))
+                                         F.softmax(step * (target_logits - logits) + logits, dim=-1)) if args.caus == 'kl' else \
+                          criterion_caus(intervened_logits,
+                                         step * (target_logits - logits) + logits)
 
             loss = recon_loss + causal_loss * args.beta
             loss += reg_loss * args.alpha if args.alpha else 0
@@ -85,7 +89,8 @@ def train(args):
                     recon_loss = criterion(recon, activation)
 
                     closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
-                    step = torch.rand(1).item()
+                    if args.step == 'random': step = torch.rand(1).item()
+                    else: step = float(args.step)
 
                     target_latent = latent[closest]
                     intervened_activn = model.decoder(step * (target_latent - latent) + latent)
@@ -93,7 +98,9 @@ def train(args):
 
                     target_logits = logits[closest]
                     causal_loss = criterion_caus(F.log_softmax(intervened_logits, dim=-1),
-                                                 F.softmax(step * (target_logits - logits) + logits, dim=-1))
+                                                 F.softmax(step * (target_logits - logits) + logits, dim=-1)) if args.caus == 'kl' else \
+                                    criterion_caus(intervened_logits,
+                                                   step * (target_logits - logits) + logits)
 
                     val_loss += (recon_loss.item() + causal_loss.item() * args.beta)
                     val_it += 1

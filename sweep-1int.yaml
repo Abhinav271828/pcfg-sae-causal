@@ -1,0 +1,51 @@
+name: sweep-1int
+program: train-sae.py
+method: grid
+metric:  
+  name: val_loss
+  goal: minimize
+parameters: #specify the hyperparamters you want to iterate over 
+  model_dir:
+    values: ['results/scratch/12owob2t']
+  layer_name:
+    values: ['res0']
+  batch_size:
+    values: [128]
+  exp_factor:
+    values: [2]
+
+  k:
+    values: [16]
+
+  beta:
+    values: [1, 100]
+  step:
+    values: [0.2, 0.02, 'rand']
+  caus:
+    values: ['mse', 'kl']
+
+  pre_bias:
+    values: [False]
+  norm:
+    values: ['']
+
+  lr:
+    values: [1e-5]
+  train_iters:
+    values: [5000]
+
+command:
+  - python3.11 train-sae.py
+  - --model_dir {model_dir}
+  - --layer_name {layer_name}
+  - --batch_size {batch_size}
+  - --exp_factor {exp_factor}
+  - --k {k}
+  - --beta {beta}
+  - --step {step}
+  - --caus {caus}
+  - --pre_bias {pre_bias}
+  - --norm {norm}
+  - --lr {lr}
+  - --train_iters {train_iters}
+

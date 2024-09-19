@@ -21,6 +21,11 @@ sparsity.add_argument("--sparsemax", help="Use sparsemax instead of softmax",
 
 parser.add_argument("--beta",        help="Causal loss coefficient",
                     type=float,      default=1,     required=False)
+parser.add_argument("--step",        help="Step size for intervention",
+                                     default=0.2,   required=False)
+parser.add_argument("--caus",        help="Causal loss function",
+                    type=str,        default='mse', required=False)
+
 parser.add_argument("--pre_bias",    help="Use pre-bias",
                     type=eval,       default=False, required=False)
 parser.add_argument("--norm",        help="Normalization method",
