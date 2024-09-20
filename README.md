@@ -43,6 +43,7 @@ The other hyperparameters are fixed; `batch_size` is 128, `lr` $10^{-5}$, `train
 
 ## Expr
 - `results/scratch/12owob2t`: Model trained on prefix Expr.
+    - 4-15: $k = 16, h = 2$; $\beta \in \{1, 100\}, s \in \{0.2, 0.02, \text{rand}\}$, loss $\in$ {MSE, KL}
 - `results/scratch/ivq8uspe`: Model trained on postfix Expr.
 
 ## English
