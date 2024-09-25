@@ -37,86 +37,12 @@ def train(args):
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
         criterion = nn.MSELoss()
 
-        for epoch in range(1):
-            prev_loss = float('inf')
-            loss_increasing = 0
-
-            train_it = 0
-            for activation, logits, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
-                if train_it > args.train_iters: break
-
-                activation = activation.to(device)
-                optimizer.zero_grad()
-                if 'input' in args.norm:
-                    norm = torch.norm(activation, p=2, dim=-1)
-                    activation = activation / norm.unsqueeze(-1)
-                latent, recon = model(activation)
-
-                recon_loss = criterion(recon, activation)
-
-                reg_loss = torch.norm(latent, p=1) if args.alpha else 0
-
-                loss = recon_loss
-                loss += reg_loss * args.alpha if args.alpha else 0
-
-                loss.backward()
-                optimizer.step()
-                train_loss = loss.item()
-
-                if args.patience and train_loss > prev_loss:
-                    loss_increasing += 1
-                    if loss_increasing == args.patience: break
-                else:
-                    loss_increasing = 0
-                    prev_loss = train_loss
-
-                if train_it % args.val_interval == 0:
-                    model.eval()
-                    val_loss = 0
-                    val_it = 0
-                    for activation, logits, seq in val_data:
-                        if val_it > args.val_iters: break
-                        activation = activation.to(device)
-                        if 'input' in args.norm:
-                            norm = torch.norm(activation, p=2, dim=-1)
-                            activation = activation / norm.unsqueeze(-1)
-                        latent, recon = model(activation)
-
-                        recon_loss = criterion(recon, activation)
-
-                        val_loss += recon_loss.item()
-                        val_it += 1
-                    model.train()
-                    wandb.log({'recon_loss' : recon_loss.item(),
-                               'reg_loss'   : reg_loss.item() if args.alpha else 0,
-                               'train_loss' : train_loss,
-                               'val_loss'   : val_loss   / args.val_iters,
-                               'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
-
-                    if args.val_patience and val_loss > prev_loss:
-                        loss_increasing += 1
-                        if loss_increasing == args.val_patience: break
-                    else:
-                        loss_increasing = 0
-                        prev_loss = val_loss
-
-                    wandb.log({'recon_loss' : recon_loss.item(),
-                               'reg_loss'   : reg_loss.item() if args.alpha else 0,
-                               'train_loss' : train_loss,
-                               'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
-                train_it += 1
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.ft_lr if args.ft else args.lr)
-    criterion = nn.MSELoss()
-    criterion_caus = nn.KLDivLoss(reduction='batchmean') if args.caus == 'kl' else \
-                     nn.MSELoss()
-
-    for epoch in range(1):
         prev_loss = float('inf')
         loss_increasing = 0
 
+        train_it = 0
         for activation, logits, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
-            if train_it > 2 * args.train_iters: break
+            if train_it > args.train_iters: break
 
             activation = activation.to(device)
             optimizer.zero_grad()
@@ -129,22 +55,7 @@ def train(args):
 
             reg_loss = torch.norm(latent, p=1) if args.alpha else 0
 
-            closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
-            if args.step == 'random': step = torch.rand(1).item()
-            else: step = float(args.step)
-
-            target_latent = latent[closest]
-            intervened_activn = model.decoder(step * (target_latent - latent) + latent)
-            intervened_logits = train_data.intervene(seq, intervened_activn)
-
-            target_logits = logits[closest]
-            causal_loss = criterion_caus(F.log_softmax(intervened_logits, dim=-1),
-                                         F.softmax(step * (target_logits - logits) + logits, dim=-1)) if args.caus == 'kl' else \
-                          criterion_caus(intervened_logits,
-                                         step * (target_logits - logits) + logits)
-
-            beta =  ((train_it / args.train_iters) - 1) * args.beta if args.curr == 'lin' else args.beta
-            loss = recon_loss + causal_loss * beta
+            loss = recon_loss
             loss += reg_loss * args.alpha if args.alpha else 0
 
             loss.backward()
@@ -172,28 +83,12 @@ def train(args):
 
                     recon_loss = criterion(recon, activation)
 
-                    closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
-                    if args.step == 'random': step = torch.rand(1).item()
-                    else: step = float(args.step)
-
-                    target_latent = latent[closest]
-                    intervened_activn = model.decoder(step * (target_latent - latent) + latent)
-                    intervened_logits = train_data.intervene(seq, intervened_activn)
-
-                    target_logits = logits[closest]
-                    causal_loss = criterion_caus(F.log_softmax(intervened_logits, dim=-1),
-                                                 F.softmax(step * (target_logits - logits) + logits, dim=-1)) if args.caus == 'kl' else \
-                                    criterion_caus(intervened_logits,
-                                                   step * (target_logits - logits) + logits)
-
-                    beta = (train_it / args.train_iters) * args.beta if args.curr == 'lin' else args.beta
-                    val_loss += (recon_loss.item() + causal_loss.item() * beta)
+                    val_loss += recon_loss.item()
                     val_it += 1
                 model.train()
                 wandb.log({'recon_loss' : recon_loss.item(),
                            'reg_loss'   : reg_loss.item() if args.alpha else 0,
                            'train_loss' : train_loss,
-                           'causal_loss': causal_loss.item(),
                            'val_loss'   : val_loss   / args.val_iters,
                            'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
 
@@ -204,12 +99,115 @@ def train(args):
                     loss_increasing = 0
                     prev_loss = val_loss
 
-                wandb.log({'recon_loss' : recon_loss.item(),
-                           'reg_loss'   : reg_loss.item() if args.alpha else 0,
-                           'causal_loss': causal_loss.item(),
-                           'train_loss' : train_loss,
-                           'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+            wandb.log({'recon_loss' : recon_loss.item(),
+                       'reg_loss'   : reg_loss.item() if args.alpha else 0,
+                       'train_loss' : train_loss,
+                       'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
             train_it += 1
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.ft_lr if args.ft else args.lr)
+    criterion = nn.MSELoss()
+    criterion_caus = nn.KLDivLoss(reduction='batchmean') if args.caus == 'kl' else \
+                     nn.MSELoss()
+
+    prev_loss = float('inf')
+    loss_increasing = 0
+
+    for activation, logits, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
+        if train_it > 2 * args.train_iters: break
+
+        activation = activation.to(device)
+        optimizer.zero_grad()
+        if 'input' in args.norm:
+            norm = torch.norm(activation, p=2, dim=-1)
+            activation = activation / norm.unsqueeze(-1)
+        latent, recon = model(activation)
+
+        recon_loss = criterion(recon, activation)
+
+        reg_loss = torch.norm(latent, p=1) if args.alpha else 0
+
+        closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
+        if args.step == 'random': step = torch.rand(1).item()
+        else: step = float(args.step)
+
+        target_latent = latent[closest]
+        intervened_activn = model.decoder(step * (target_latent - latent) + latent)
+        intervened_logits = train_data.intervene(seq, intervened_activn)
+
+        target_logits = logits[closest]
+        causal_loss = criterion_caus(F.log_softmax(intervened_logits, dim=-1),
+                                     F.softmax(step * (target_logits - logits) + logits, dim=-1)) if args.caus == 'kl' else \
+                      criterion_caus(intervened_logits,
+                                     step * (target_logits - logits) + logits)
+
+        beta =  ((train_it / args.train_iters) - 1) * args.beta if args.curr == 'lin' else args.beta
+        loss = recon_loss + causal_loss * beta
+        loss += reg_loss * args.alpha if args.alpha else 0
+
+        loss.backward()
+        optimizer.step()
+        train_loss = loss.item()
+
+        if args.patience and train_loss > prev_loss:
+            loss_increasing += 1
+            if loss_increasing == args.patience: break
+        else:
+            loss_increasing = 0
+            prev_loss = train_loss
+
+        if train_it % args.val_interval == 0:
+            model.eval()
+            val_loss = 0
+            val_it = 0
+            for activation, logits, seq in val_data:
+                if val_it > args.val_iters: break
+                activation = activation.to(device)
+                if 'input' in args.norm:
+                    norm = torch.norm(activation, p=2, dim=-1)
+                    activation = activation / norm.unsqueeze(-1)
+                latent, recon = model(activation)
+
+                recon_loss = criterion(recon, activation)
+
+                closest = torch.cdist(latent, latent, p=2).fill_diagonal_(float('inf')).argmin(-1)
+                if args.step == 'random': step = torch.rand(1).item()
+                else: step = float(args.step)
+
+                target_latent = latent[closest]
+                intervened_activn = model.decoder(step * (target_latent - latent) + latent)
+                intervened_logits = train_data.intervene(seq, intervened_activn)
+
+                target_logits = logits[closest]
+                causal_loss = criterion_caus(F.log_softmax(intervened_logits, dim=-1),
+                                             F.softmax(step * (target_logits - logits) + logits, dim=-1)) if args.caus == 'kl' else \
+                                criterion_caus(intervened_logits,
+                                               step * (target_logits - logits) + logits)
+
+                beta = (train_it / args.train_iters) * args.beta if args.curr == 'lin' else args.beta
+                val_loss += (recon_loss.item() + causal_loss.item() * beta)
+                val_it += 1
+            model.train()
+            wandb.log({'recon_loss' : recon_loss.item(),
+                       'reg_loss'   : reg_loss.item() if args.alpha else 0,
+                       'train_loss' : train_loss,
+                       'causal_loss': causal_loss.item(),
+                       'val_loss'   : val_loss   / args.val_iters,
+                       'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+
+            if args.val_patience and val_loss > prev_loss:
+                loss_increasing += 1
+                if loss_increasing == args.val_patience: break
+            else:
+                loss_increasing = 0
+                prev_loss = val_loss
+
+        wandb.log({'recon_loss' : recon_loss.item(),
+                   'reg_loss'   : reg_loss.item() if args.alpha else 0,
+                   'causal_loss': causal_loss.item(),
+                   'train_loss' : train_loss,
+                   'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+        train_it += 1
 
     i = 0
     while True:
