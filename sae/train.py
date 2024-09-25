@@ -7,17 +7,6 @@ import wandb
 from tqdm import tqdm
 import json
 
-def get_sae(path, idx):
-    state_dict = torch.load(os.path.join(path, 'latest_ckpt.pt'), map_location='cpu')
-    cfg = state_dict['config']
-    embedding_size = cfg.model.n_embd
-    args = json.load(open(os.path.join(path, f'sae_{idx}/config.json')))
-    sae = SAE(embedding_size, args.exp_factor * embedding_size, pre_bias=args.pre_bias, k=args.k, sparsemax=args.sparsemax, norm=args.norm).to('cpu')
-    state_dict = torch.load(os.path.join(path, f'sae_{idx}/model.pth'), map_location='cpu')
-    sae.load_state_dict(state_dict)
-    sae.train()
-    return sae
-
 def train(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
