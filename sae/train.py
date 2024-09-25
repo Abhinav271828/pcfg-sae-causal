@@ -60,7 +60,8 @@ def train(args):
                           criterion_caus(intervened_logits,
                                          step * (target_logits - logits) + logits)
 
-            loss = recon_loss + causal_loss * args.beta
+            beta = (train_it / args.train_iters) * args.beta if args.curr == 'lin' else args.beta
+            loss = recon_loss + causal_loss * beta
             loss += reg_loss * args.alpha if args.alpha else 0
 
             loss.backward()
@@ -102,7 +103,8 @@ def train(args):
                                     criterion_caus(intervened_logits,
                                                    step * (target_logits - logits) + logits)
 
-                    val_loss += (recon_loss.item() + causal_loss.item() * args.beta)
+                    beta = (train_it / args.train_iters) * args.beta if args.curr == 'lin' else args.beta
+                    val_loss += (recon_loss.item() + causal_loss.item() * beta)
                     val_it += 1
                 model.train()
                 wandb.log({'recon_loss': recon_loss.item(),
