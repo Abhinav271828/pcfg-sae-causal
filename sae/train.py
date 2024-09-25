@@ -107,11 +107,12 @@ def train(args):
                     val_loss += (recon_loss.item() + causal_loss.item() * beta)
                     val_it += 1
                 model.train()
-                wandb.log({'recon_loss': recon_loss.item(),
-                           'reg_loss'  : reg_loss.item() if args.alpha else 0,
-                           'train_loss': train_loss,
+                wandb.log({'recon_loss' : recon_loss.item(),
+                           'reg_loss'   : reg_loss.item() if args.alpha else 0,
+                           'train_loss' : train_loss,
                            'causal_loss': causal_loss.item(),
-                           'val_loss'  : val_loss   / args.val_iters})
+                           'val_loss'   : val_loss   / args.val_iters,
+                           'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
 
                 if args.val_patience and val_loss > prev_loss:
                     loss_increasing += 1
@@ -120,10 +121,11 @@ def train(args):
                     loss_increasing = 0
                     prev_loss = val_loss
 
-                wandb.log({'recon_loss': recon_loss.item(),
-                           'reg_loss'  : reg_loss.item() if args.alpha else 0,
+                wandb.log({'recon_loss' : recon_loss.item(),
+                           'reg_loss'   : reg_loss.item() if args.alpha else 0,
                            'causal_loss': causal_loss.item(),
-                           'train_loss': train_loss})
+                           'train_loss' : train_loss,
+                           'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
             train_it += 1
 
     i = 0
