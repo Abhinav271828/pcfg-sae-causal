@@ -7,6 +7,17 @@ import wandb
 from tqdm import tqdm
 import json
 
+def get_sae(path, idx):
+    state_dict = torch.load(os.path.join(path, 'latest_ckpt.pt'), map_location='cpu')
+    cfg = state_dict['config']
+    embedding_size = cfg.model.n_embd
+    args = json.load(open(os.path.join(path, f'sae_{idx}/config.json')))
+    sae = SAE(embedding_size, args.exp_factor * embedding_size, pre_bias=args.pre_bias, k=args.k, sparsemax=args.sparsemax, norm=args.norm).to('cpu')
+    state_dict = torch.load(os.path.join(path, f'sae_{idx}/model.pth'), map_location='cpu')
+    sae.load_state_dict(state_dict)
+    sae.train()
+    return sae
+
 def train(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -16,24 +27,96 @@ def train(args):
     model = SAE(embedding_size, args.exp_factor * embedding_size, pre_bias=args.pre_bias, k=args.k, sparsemax=args.sparsemax, norm=args.norm).to(device)
     model.train()
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    criterion = nn.MSELoss()
-    criterion_caus = nn.KLDivLoss(reduction='batchmean') if args.caus == 'kl' else \
-                     nn.MSELoss()
-
     # Train the SAE
     wandb.init(project="pcfg-sae-causal")
     wandb.run.name = wandb.run.id
     wandb.run.save()
     wandb.config.update(vars(args))
 
+    if args.ft:
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+        criterion = nn.MSELoss()
+
+        for epoch in range(1):
+            prev_loss = float('inf')
+            loss_increasing = 0
+
+            train_it = 0
+            for activation, logits, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
+                if train_it > args.train_iters: break
+
+                activation = activation.to(device)
+                optimizer.zero_grad()
+                if 'input' in args.norm:
+                    norm = torch.norm(activation, p=2, dim=-1)
+                    activation = activation / norm.unsqueeze(-1)
+                latent, recon = model(activation)
+
+                recon_loss = criterion(recon, activation)
+
+                reg_loss = torch.norm(latent, p=1) if args.alpha else 0
+
+                loss = recon_loss
+                loss += reg_loss * args.alpha if args.alpha else 0
+
+                loss.backward()
+                optimizer.step()
+                train_loss = loss.item()
+
+                if args.patience and train_loss > prev_loss:
+                    loss_increasing += 1
+                    if loss_increasing == args.patience: break
+                else:
+                    loss_increasing = 0
+                    prev_loss = train_loss
+
+                if train_it % args.val_interval == 0:
+                    model.eval()
+                    val_loss = 0
+                    val_it = 0
+                    for activation, logits, seq in val_data:
+                        if val_it > args.val_iters: break
+                        activation = activation.to(device)
+                        if 'input' in args.norm:
+                            norm = torch.norm(activation, p=2, dim=-1)
+                            activation = activation / norm.unsqueeze(-1)
+                        latent, recon = model(activation)
+
+                        recon_loss = criterion(recon, activation)
+
+                        val_loss += recon_loss.item()
+                        val_it += 1
+                    model.train()
+                    wandb.log({'recon_loss' : recon_loss.item(),
+                               'reg_loss'   : reg_loss.item() if args.alpha else 0,
+                               'train_loss' : train_loss,
+                               'val_loss'   : val_loss   / args.val_iters,
+                               'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+
+                    if args.val_patience and val_loss > prev_loss:
+                        loss_increasing += 1
+                        if loss_increasing == args.val_patience: break
+                    else:
+                        loss_increasing = 0
+                        prev_loss = val_loss
+
+                    wandb.log({'recon_loss' : recon_loss.item(),
+                               'reg_loss'   : reg_loss.item() if args.alpha else 0,
+                               'train_loss' : train_loss,
+                               'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+                train_it += 1
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.ft_lr if args.ft else args.lr)
+    criterion = nn.MSELoss()
+    criterion_caus = nn.KLDivLoss(reduction='batchmean') if args.caus == 'kl' else \
+                     nn.MSELoss()
+
     for epoch in range(1):
         prev_loss = float('inf')
         loss_increasing = 0
 
-        train_it = 0
         for activation, logits, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
-            if train_it > args.train_iters: break
+            if train_it > 2 * args.train_iters: break
 
             activation = activation.to(device)
             optimizer.zero_grad()
@@ -60,7 +143,7 @@ def train(args):
                           criterion_caus(intervened_logits,
                                          step * (target_logits - logits) + logits)
 
-            beta = (train_it / args.train_iters) * args.beta if args.curr == 'lin' else args.beta
+            beta =  ((train_it / args.train_iters) - 1) * args.beta if args.curr == 'lin' else args.beta
             loss = recon_loss + causal_loss * beta
             loss += reg_loss * args.alpha if args.alpha else 0
 
