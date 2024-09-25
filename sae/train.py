@@ -79,7 +79,8 @@ def train(args):
                            'reg_loss'   : reg_loss.item() if args.alpha else 0,
                            'train_loss' : train_loss,
                            'val_loss'   : val_loss   / args.val_iters,
-                           'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+                           'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1),
+                           'beta'       : 0})
 
                 if args.val_patience and val_loss > prev_loss:
                     loss_increasing += 1
@@ -91,7 +92,8 @@ def train(args):
             wandb.log({'recon_loss' : recon_loss.item(),
                        'reg_loss'   : reg_loss.item() if args.alpha else 0,
                        'train_loss' : train_loss,
-                       'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+                       'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1),
+                       'beta'       : 0})
             train_it += 1
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.ft_lr if args.ft else args.lr)
@@ -173,7 +175,7 @@ def train(args):
                                 criterion_caus(intervened_logits,
                                                step * (target_logits - logits) + logits)
 
-                beta = (train_it / args.train_iters) * args.beta if args.curr == 'lin' else args.beta
+                beta = ((train_it / args.train_iters) - 1) * args.beta if args.curr == 'lin' else args.beta
                 val_loss += (recon_loss.item() + causal_loss.item() * beta)
                 val_it += 1
             model.train()
@@ -182,7 +184,8 @@ def train(args):
                        'train_loss' : train_loss,
                        'causal_loss': causal_loss.item(),
                        'val_loss'   : val_loss   / args.val_iters,
-                       'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+                       'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1),
+                       'beta'       : beta})
 
             if args.val_patience and val_loss > prev_loss:
                 loss_increasing += 1
@@ -195,7 +198,8 @@ def train(args):
                    'reg_loss'   : reg_loss.item() if args.alpha else 0,
                    'causal_loss': causal_loss.item(),
                    'train_loss' : train_loss,
-                   'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1)})
+                   'sparsity'   : ((latent == 0).sum(dim=0) == latent.size(0)).sum() / latent.size(1),
+                   'beta'       : beta})
         train_it += 1
 
     i = 0
