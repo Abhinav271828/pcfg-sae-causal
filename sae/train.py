@@ -17,12 +17,12 @@ def train(args):
     model.train()
 
     # Train the SAE
-    wandb.require("legacy-service")
     wandb.init(project="pcfg-sae-causal")
     wandb.run.name = wandb.run.id
     wandb.run.save()
     wandb.config.update(vars(args))
 
+    train_it = 0
     if args.ft:
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
         criterion = nn.MSELoss()
@@ -30,7 +30,6 @@ def train(args):
         prev_loss = float('inf')
         loss_increasing = 0
 
-        train_it = 0
         for activation, logits, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
             if train_it > args.train_iters: break
 
@@ -109,7 +108,8 @@ def train(args):
     loss_increasing = 0
 
     for activation, logits, seq, in tqdm(train_data, desc="Training", total=args.train_iters):
-        if train_it > 2 * args.train_iters: break
+        total_iters = 2 * args.train_iters if args.ft else args.train_iters
+        if train_it > total_iters: break
 
         activation = activation.to(device)
         optimizer.zero_grad()
@@ -136,7 +136,8 @@ def train(args):
                       criterion_caus(intervened_logits,
                                      step * (target_logits - logits) + logits)
 
-        beta =  ((train_it / args.train_iters) - 1) * args.beta if args.curr == 'lin' else args.beta
+        iter_fraction = (train_it / args.train_iters) - 1 if args.ft else train_it / args.train_iters
+        beta =  iter_fraction * args.beta if args.curr == 'lin' else args.beta
         loss = recon_loss + causal_loss * beta
         loss += reg_loss * args.alpha if args.alpha else 0
 
@@ -179,7 +180,8 @@ def train(args):
                                 criterion_caus(intervened_logits,
                                                step * (target_logits - logits) + logits)
 
-                beta = ((train_it / args.train_iters) - 1) * args.beta if args.curr == 'lin' else args.beta
+                iter_fraction = (train_it / args.train_iters) - 1 if args.ft else train_it / args.train_iters
+                beta =  iter_fraction * args.beta if args.curr == 'lin' else args.beta
                 val_loss += (recon_loss.item() + causal_loss.item() * beta)
                 val_it += 1
             model.train()
