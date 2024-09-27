@@ -44,6 +44,10 @@ The other hyperparameters are fixed; `batch_size` is 128, `lr` $10^{-5}$, `train
 ## Expr
 - `results/scratch/12owob2t`: Model trained on prefix Expr.
     - 4-15: $k = 16, h = 2$; $\beta \in \{1, 100\}, s \in \{0.2, 0.02, \text{rand}\}$, loss $\in$ {MSE, KL}
+    - 22: pretrained at $1e-5$, finetuned at $1e-7$, $\beta$ changing linearly from 0 to 0.5 during ft
+    - 23: pretrained at $1e-5$, finetuned at $1e-7$, $\beta$ fixed at 0.5
+    - 24: $\beta$ changing linearly throughout training, no finetuning
+    - 25: $\beta = 0.5$ throughout training, no finetuning
 - `results/scratch/ivq8uspe`: Model trained on postfix Expr.
 
 ## English
