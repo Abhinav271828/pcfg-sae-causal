@@ -31,7 +31,7 @@ parser.add_argument("--caus",   help="Causal loss function",
 parser.add_argument("--ft",     help="Whether to fine-tune",
                     type=eval,  default=False, required=False)
 parser.add_argument("--ft_lr",  help="Fine-tuning learning rate",
-                    type=float, default=1e-6, required=False)
+                    type=float, default=1e-7, required=False)
 
 parser.add_argument("--pre_bias",    help="Use pre-bias",
                     type=eval,       default=False, required=False)
