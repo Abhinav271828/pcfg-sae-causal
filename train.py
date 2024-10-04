@@ -145,7 +145,7 @@ def train(cfg, model, dataloader, optimizer, device):
                 grammar_results_dict = grammar_evals(
                     cfg=cfg, model=model,
                     template=dataloader.dataset.template if cfg.data.language != 'random' else None, 
-                    grammar=dataloader.dataset.PCFG,
+                    grammar=dataloader.dataset.PCFG if cfg.data.language != 'random' else dataloader.dataset,
                     device=device,
                     ) if cfg.eval.grammar else (None, None)
                 
