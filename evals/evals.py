@@ -24,16 +24,18 @@ def grammar_evals(cfg, model, template, grammar, device):
         if template:
             inputs = template.repeat(eval_bsize, 1).to(device)
         else:
-            inputs = torch.zeros(eval_bsize, 1).to(device)
+            inputs = torch.zeros(eval_bsize, 1, dtype=torch.long).to(device)
         samples, per_token_logprobs = model.sample(
             inputs=inputs, 
-            max_new_tokens=cfg.data.max_sample_length - 10, 
+            max_new_tokens=(cfg.data.max_sample_length) - 10 if template else \
+                            cfg.data.config.tuple_size ** cfg.data.config.num_layers,
             retrieve_llhoods='tokens',
             )
 
         # Transfer to CPU and detokenize
         samples = samples.cpu().numpy()
-        samples = [grammar.detokenize_sentence(s).split('<eos>')[0] for s in samples]
+        if cfg.data.language != 'random':
+            samples = [grammar.detokenize_sentence(s).split('<eos>')[0] for s in samples]
 
         # Eval grammatical correctness
         results_grammaticality = {

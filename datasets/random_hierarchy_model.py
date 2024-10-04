@@ -191,25 +191,26 @@ def sample_without_replacement(max_data, train_size, test_size, seed_sample, rul
 
 def format_rules(rules): # assumes that n_classes = 1
     rules_string = "S -> "
-    for rule in rules[0][0]:
+    last_prob = 1 - (eval(f'{1/len(rules[0][0]):.2f}')*(len(rules[0][0])-1))
+    for rule in rules[0][0][:-1]:
         rules_string += f"1_{rule[0]} 1_{rule[1]} [{1/len(rules[0][0]):.2f}] | "
-    rules_string = rules_string[:-3] + "\n"
+    rules_string += f"1_{rules[0][0][-1][0]} 1_{rules[0][0][-1][1]} [{last_prob:.2f}]\n"
 
     for L in range(1, len(rules)-1):
         level_rules = rules[L]
         for nt in range(len(level_rules)):
             rules_string += f"{L}_{nt} -> "
-            for rule in level_rules[nt]:
+            for rule in level_rules[nt][:-1]:
                 rules_string += f"{L+1}_{rule[0]} {L+1}_{rule[1]} [{1/len(level_rules[nt]):.2f}] | "
-            rules_string = rules_string[:-3] + "\n"
+            rules_string += f"{L+1}_{level_rules[nt][-1][0]} {L+1}_{level_rules[nt][-1][1]} [{last_prob:.2f}]\n"
 
     L = len(rules)-1
     level_rules = rules[L]
     for nt in range(len(level_rules)):
         rules_string += f"{L}_{nt} -> "
-        for rule in level_rules[nt]:
+        for rule in level_rules[nt][:-1]:
             rules_string += f"{rule[0]} {rule[1]} [{1/len(level_rules[nt]):.2f}] | "
-        rules_string = rules_string[:-3] + "\n"
+        rules_string += f"{level_rules[nt][-1][0]} {level_rules[nt][-1][1]} [{last_prob:.2f}]\n"
     
     return rules_string
 
@@ -381,7 +382,8 @@ class RandomHierarchyModel(Dataset):
         if self.transform:
             x, _ = self.transform(x, y)
 
-        return torch.cat([torch.tensor([self.bos]), x, torch.tensor([self.eos])], dim=0)
+        return (torch.cat([torch.tensor([self.bos]), x, torch.tensor([self.eos])], dim=0),
+                torch.repeat_interleave(torch.tensor(self.tuple_size ** self.num_layers), x.size(0)).to(dtype=torch.float))
 
     def get_rules(self):
         return self.rules
