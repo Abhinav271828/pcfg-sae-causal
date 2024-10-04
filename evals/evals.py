@@ -24,7 +24,10 @@ def grammar_evals(cfg, model, template, grammar, device):
         if template:
             inputs = template.repeat(eval_bsize, 1).to(device)
         else:
+            bos = cfg.data.config.num_features
+            eos = cfg.data.config.num_features + 1
             inputs = torch.zeros(eval_bsize, 1, dtype=torch.long).to(device)
+            inputs[:] = bos
         samples, per_token_logprobs = model.sample(
             inputs=inputs, 
             max_new_tokens=(cfg.data.max_sample_length) - 10 if template else \
@@ -36,6 +39,8 @@ def grammar_evals(cfg, model, template, grammar, device):
         samples = samples.cpu().numpy()
         if cfg.data.language != 'random':
             samples = [grammar.detokenize_sentence(s).split('<eos>')[0] for s in samples]
+        else:
+            samples = [' '.join(f'T{x}' for x in s).split(f'T{eos}')[0] for s in samples]
 
         # Eval grammatical correctness
         results_grammaticality = {

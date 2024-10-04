@@ -193,24 +193,24 @@ def format_rules(rules): # assumes that n_classes = 1
     rules_string = "S -> "
     last_prob = 1 - (eval(f'{1/len(rules[0][0]):.2f}')*(len(rules[0][0])-1))
     for rule in rules[0][0][:-1]:
-        rules_string += f"1_{rule[0]} 1_{rule[1]} [{1/len(rules[0][0]):.2f}] | "
-    rules_string += f"1_{rules[0][0][-1][0]} 1_{rules[0][0][-1][1]} [{last_prob:.2f}]\n"
+        rules_string += f"NT1_{rule[0]} NT1_{rule[1]} [{1/len(rules[0][0]):.2f}] | "
+    rules_string += f"NT1_{rules[0][0][-1][0]} NT1_{rules[0][0][-1][1]} [{last_prob:.2f}]\n"
 
     for L in range(1, len(rules)-1):
         level_rules = rules[L]
         for nt in range(len(level_rules)):
-            rules_string += f"{L}_{nt} -> "
+            rules_string += f"NT{L}_{nt} -> "
             for rule in level_rules[nt][:-1]:
-                rules_string += f"{L+1}_{rule[0]} {L+1}_{rule[1]} [{1/len(level_rules[nt]):.2f}] | "
-            rules_string += f"{L+1}_{level_rules[nt][-1][0]} {L+1}_{level_rules[nt][-1][1]} [{last_prob:.2f}]\n"
+                rules_string += f"NT{L+1}_{rule[0]} NT{L+1}_{rule[1]} [{1/len(level_rules[nt]):.2f}] | "
+            rules_string += f"NT{L+1}_{level_rules[nt][-1][0]} NT{L+1}_{level_rules[nt][-1][1]} [{last_prob:.2f}]\n"
 
     L = len(rules)-1
     level_rules = rules[L]
     for nt in range(len(level_rules)):
-        rules_string += f"{L}_{nt} -> "
+        rules_string += f"NT{L}_{nt} -> "
         for rule in level_rules[nt][:-1]:
-            rules_string += f"{rule[0]} {rule[1]} [{1/len(level_rules[nt]):.2f}] | "
-        rules_string += f"{level_rules[nt][-1][0]} {level_rules[nt][-1][1]} [{last_prob:.2f}]\n"
+            rules_string += f"'T{rule[0]}' 'T{rule[1]}' [{1/len(level_rules[nt]):.2f}] | "
+        rules_string += f"'T{level_rules[nt][-1][0]}' 'T{level_rules[nt][-1][1]}' [{last_prob:.2f}]\n"
     
     return rules_string
 
@@ -355,15 +355,15 @@ class RandomHierarchyModel(Dataset):
             self.features = self.features.permute(0, 2, 1)
 
         elif 'long' in input_format:
-            self.features = self.features.long() + 1
+            self.features = self.features.long()
 
         else:
             raise ValueError
 
         self.transform = transform
 
-        self.bos = 0
-        self.eos = self.features.max() + 1
+        self.bos = self.features.max() + 1
+        self.eos = self.features.max() + 2
         self.max_sample_length = self.features.size(1)
 
     def __len__(self):
@@ -383,7 +383,36 @@ class RandomHierarchyModel(Dataset):
             x, _ = self.transform(x, y)
 
         return (torch.cat([torch.tensor([self.bos]), x, torch.tensor([self.eos])], dim=0),
-                torch.repeat_interleave(torch.tensor(self.tuple_size ** self.num_layers), x.size(0)).to(dtype=torch.float))
+                torch.tensor(self.tuple_size ** self.num_layers, dtype=torch.long))
 
     def get_rules(self):
         return self.rules
+
+    def check_grammaticality(self, sentence: str) -> bool:
+        """Check if a sentence is in the grammar.
+
+        Args:
+            sentence: The sentence to check.
+
+        Returns:
+            Whether the sentence is in the grammar.
+        """
+
+        # Remove instruction decorator and pad tokens
+        if f'T{self.bos}' in sentence:
+            sentence = sentence.split(f'T{self.bos}')
+            sentence = sentence[1] if len(sentence) > 1 else sentence[0]
+ 
+        # Tokenize the sentence
+        tokens = sentence.split(' ')
+        while '' in tokens:
+            tokens.remove('')
+
+        # Run parser
+        try:
+            parser_output = self.parser.parse(tokens).__next__()
+            logprobs, height = parser_output.logprob(), parser_output.height()
+            return (True, logprobs, height, None), len(tokens)
+        except:
+            failure = ' '.join(tokens)
+            return (False, None, None, failure), len(tokens)
