@@ -167,7 +167,7 @@ def train(cfg, model, dataloader, optimizer, device):
                     logits.reshape(-1, logits.size(-1)),
                     labels.reshape(-1),
                     # CORR: To allow us to avoid the replacement above.
-                    ignore_index=dataloader.dataset.pad_token_id if cfg.data.language == 'random' else -100,#-100,
+                    ignore_index=dataloader.dataset.pad_token_id if cfg.data.language != 'random' else -100,
                     reduction='none'
                     ) # (B*L-1)
                 loss = loss.reshape(B, -1).mean(dim=1) # Sum over sequence length
