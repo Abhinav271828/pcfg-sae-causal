@@ -28,7 +28,8 @@ def main(cfg):
                 num_features=cfg.data.config.num_features,
                 num_classes=1,
                 num_synonyms=cfg.data.config.num_synonyms,
-                num_layers=cfg.data.config.num_layers),
+                num_layers=cfg.data.config.num_layers,
+                input_format='long'),
             batch_size=cfg.data.batch_size,
             shuffle=True,
             num_workers=cfg.data.num_workers)

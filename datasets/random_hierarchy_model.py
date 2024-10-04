@@ -266,6 +266,7 @@ class RandomHierarchyModel(Dataset):
 
         self.bos = 0
         self.eos = self.features.max() + 1
+        self.max_sample_length = self.features.size(1)
 
     def __len__(self):
         return len(self.labels)
