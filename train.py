@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 from model import GPT
 from dgp import get_dataloader
+from datasets import *
 from evals import grammar_evals
 
 from utils import init_wandb, set_seed, save_config, open_log, cleanup
@@ -21,18 +22,28 @@ def main(cfg):
     fp = open_log(cfg)
     device = cfg.device if torch.cuda.is_available() else 'cpu'
 
-    # Dataloader
-    dataloader = get_dataloader(
-        language=cfg.data.language,
-        config=cfg.data.config,
-        alpha=cfg.data.alpha,
-        prior_type=cfg.data.prior_type,
-        num_iters=cfg.data.num_iters * cfg.data.batch_size,
-        max_sample_length=cfg.data.max_sample_length,
-        seed=cfg.seed,
-        batch_size=cfg.data.batch_size,
-        num_workers=cfg.data.num_workers,
-    )
+    if cfg.data.language == 'random':
+        dataloader = torch.utils.data.DataLoader(
+            RandomHierarchyModel(
+                num_features=cfg.data.config.num_features,
+                num_classes=1,
+                num_synonyms=cfg.data.config.num_synonyms,
+                num_layers=cfg.data.config.num_layers),
+            batch_size=cfg.data.batch_size,
+            shuffle=True,
+            num_workers=cfg.data.num_workers)
+    else:
+        dataloader = get_dataloader(
+            language=cfg.data.language,
+            config=cfg.data.config,
+            alpha=cfg.data.alpha,
+            prior_type=cfg.data.prior_type,
+            num_iters=cfg.data.num_iters * cfg.data.batch_size,
+            max_sample_length=cfg.data.max_sample_length,
+            seed=cfg.seed,
+            batch_size=cfg.data.batch_size,
+            num_workers=cfg.data.num_workers,
+        )
 
     # Check if model is compatible with data
     sanity_checks(cfg, dataloader.dataset.max_sample_length)

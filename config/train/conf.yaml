@@ -7,7 +7,7 @@ bf16: True
 epochs: 1
 
 data:
-  language: 'expr' # ['english', 'expr', 'dyck']
+  language: 'expr' # ['english', 'expr', 'dyck', 'random']
   config:
     # n_nouns: 10 # for english
     # n_verbs: 10
@@ -24,6 +24,11 @@ data:
     postfix: false
     # n_brackets: 2 # for dyck
     # p_nest: 0.5
+
+    # num_features: 32 # for random
+    # num_synonyms: 8
+    # tuple_size: 2
+    # num_layers: 3
   alpha: 1e5 # depends on the prior type
   prior_type: 'dirichlet' # ['dirichlet', 'zipfian', 'structured_zeros', 'uniform']
   max_sample_length: 128
