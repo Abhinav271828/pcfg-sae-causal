@@ -383,7 +383,7 @@ class RandomHierarchyModel(Dataset):
             x, _ = self.transform(x, y)
 
         return (torch.cat([torch.tensor([self.bos]), x, torch.tensor([self.eos])], dim=0),
-                torch.tensor(self.tuple_size ** self.num_layers, dtype=torch.long))
+                torch.tensor(self.tuple_size ** self.num_layers, dtype=torch.float))
 
     def get_rules(self):
         return self.rules
