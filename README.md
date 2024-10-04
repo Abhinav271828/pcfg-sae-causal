@@ -52,6 +52,10 @@ The other hyperparameters are fixed; `batch_size` is 128, `lr` $10^{-5}$, `train
 
 ## English
 - `results/scratch/3v4gwdfk`: Model trained on English (no prepositions, no relative clauses, p_conj 0.25 for nouns, 0.15 for verbs).
+    - 1: pretrained at $1e-5$, finetuned at $1e-7$, $\beta$ changing linearly from 0 to 0.5 during ft
+    - 2: pretrained at $1e-5$, finetuned at $1e-7$, $\beta$ fixed at 0.5
+    - 3: $\beta$ changing linearly throughout training, no finetuning
+    - 4: $\beta = 0.5$ throughout training, no finetuning
 - `results/scratch/vx8j11gp`: Model trained on English with transitivity and no other variations.
 - `results/scratch/9rts35mx`: Model trained on English with adverbial and adjectival relative clauses.
 - `results/scratch/bcb19qnd`: Model trained on English with adverbial and adjectival prepositional phrases (3 prepositions).
