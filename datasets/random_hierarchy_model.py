@@ -6,7 +6,7 @@ import copy
 import numpy as np
 import random
 import os
-import pkl
+import pickle as pkl
 
 import torch
 import torch.nn.functional as F
