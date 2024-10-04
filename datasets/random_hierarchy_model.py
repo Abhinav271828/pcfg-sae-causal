@@ -5,6 +5,8 @@ import copy
 
 import numpy as np
 import random
+import os
+import pkl
 
 import torch
 import torch.nn.functional as F
@@ -416,3 +418,12 @@ class RandomHierarchyModel(Dataset):
         except:
             failure = ' '.join(tokens)
             return (False, None, None, failure), len(tokens)
+
+    def save_grammar(self, path_to_results: str):
+        """
+        Save the grammar underlying the dataset
+        """
+        base_dir = os.path.join(path_to_results, 'grammar')
+        os.makedirs(base_dir, exist_ok=True)
+        with open(os.path.join(base_dir, 'PCFG.pkl'), 'wb') as f:
+            pkl.dump(self.PCFG, f)
