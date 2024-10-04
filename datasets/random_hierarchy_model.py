@@ -1,4 +1,5 @@
 from itertools import *
+from typing import Iterator, List, Tuple, Union
 import warnings
 import copy
 
@@ -8,6 +9,9 @@ import random
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
+
+import nltk
+Symbol = Union[str, nltk.grammar.Nonterminal]
 
 from .utils import dec2bin, dec2base
 
@@ -185,6 +189,96 @@ def sample_without_replacement(max_data, train_size, test_size, seed_sample, rul
 
     return features, labels
 
+def format_rules(rules): # assumes that n_classes = 1
+    rules_string = "S -> "
+    for rule in rules[0][0]:
+        rules_string += f"1_{rule[0]} 1_{rule[1]} [{1/len(rules[0][0]):.2f}] | "
+    rules_string = rules_string[:-3] + "\n"
+
+    for L in range(1, len(rules)-1):
+        level_rules = rules[L]
+        for nt in range(len(level_rules)):
+            rules_string += f"{L}_{nt} -> "
+            for rule in level_rules[nt]:
+                rules_string += f"{L+1}_{rule[0]} {L+1}_{rule[1]} [{1/len(level_rules[nt]):.2f}] | "
+            rules_string = rules_string[:-3] + "\n"
+
+    L = len(rules)-1
+    level_rules = rules[L]
+    for nt in range(len(level_rules)):
+        rules_string += f"{L}_{nt} -> "
+        for rule in level_rules[nt]:
+            rules_string += f"{rule[0]} {rule[1]} [{1/len(level_rules[nt]):.2f}] | "
+        rules_string = rules_string[:-3] + "\n"
+    
+    return rules_string
+
+class ProbabilisticGenerator(nltk.grammar.PCFG):
+    def generate(self, n: int = 1) -> Iterator[str]:
+        """Probabilistically, recursively reduce the start symbol `n` times,
+        yielding a valid sentence each time.
+
+        Args:
+            n: The number of sentences to generate.
+
+        Yields:
+            The next generated sentence.
+        """
+        for _ in range(n):
+            x = self._generate_derivation(self.start())
+            yield x
+
+    def _generate_derivation(self, nonterminal: nltk.grammar.Nonterminal) -> str:
+        """Probabilistically, recursively reduce `nonterminal` to generate a
+        derivation of `nonterminal`.
+
+        Args:
+            nonterminal: The non-terminal nonterminal to reduce.
+
+        Returns:
+            The derived sentence.
+        """
+        sentence: List[str] = []
+        symbol: Symbol
+        derivation: str
+
+        for symbol in self._reduce_once(nonterminal):
+            if isinstance(symbol, str):
+                derivation = symbol
+            else:
+                derivation = self._generate_derivation(symbol)
+
+            if derivation != "":
+                sentence.append(derivation)
+
+        return " ".join(sentence)
+
+    def _reduce_once(self, nonterminal: nltk.grammar.Nonterminal) -> Tuple[Symbol]:
+        """Probabilistically choose a production to reduce `nonterminal`, then
+        return the right-hand side.
+
+        Args:
+            nonterminal: The non-terminal symbol to derive.
+
+        Returns:
+            The right-hand side of the chosen production.
+        """
+        return self._choose_production_reducing(nonterminal).rhs()
+
+    def _choose_production_reducing(
+        self, nonterminal: nltk.grammar.Nonterminal
+    ) -> nltk.grammar.ProbabilisticProduction:
+        """Probabilistically choose a production that reduces `nonterminal`.
+
+        Args:
+            nonterminal: The non-terminal symbol for which to choose a production.
+
+        Returns:
+            The chosen production.
+        """
+        productions: List[nltk.grammar.ProbabilisticProduction] = self._lhs_index[nonterminal]
+        probabilities: List[float] = [production.prob() for production in productions]
+        return random.choices(productions, weights=probabilities)[0]
 
 class RandomHierarchyModel(Dataset):
     """
@@ -214,7 +308,10 @@ class RandomHierarchyModel(Dataset):
         self.num_classes = num_classes
         self.tuple_size = tuple_size
 
-        rules = sample_rules( num_features, num_classes, num_synonyms, tuple_size, num_layers, seed=seed_rules)
+        self.rules = sample_rules( num_features, num_classes, num_synonyms, tuple_size, num_layers, seed=seed_rules)
+        self.rules_string = format_rules(self.rules)
+        self.PCFG = ProbabilisticGenerator.fromstring(self.rules_string)
+        self.parser = nltk.ViterbiParser(self.PCFG)
  
         max_data = num_classes * num_synonyms ** ((tuple_size ** num_layers - 1) // (tuple_size - 1))
         assert train_size >= -1, "train_size must be greater than or equal to -1"
@@ -231,11 +328,11 @@ class RandomHierarchyModel(Dataset):
 
         if not replacement:
             self.features, self.labels = sample_without_replacement(
-                max_data, train_size, test_size, seed_sample, rules
+                max_data, train_size, test_size, seed_sample, self.rules
             )
         else:
             self.features, self.labels = sample_with_replacement(
-                train_size, test_size, seed_sample, rules
+                train_size, test_size, seed_sample, self.rules
             )
 
         if 'onehot' not in input_format:
@@ -279,7 +376,7 @@ class RandomHierarchyModel(Dataset):
         Returns:
             Feature-label pairs at index            
         """
-        x = self.features[idx]
+        x, y = self.features[idx], self.labels[idx]
 
         if self.transform:
             x, _ = self.transform(x, y)

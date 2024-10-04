@@ -47,10 +47,14 @@ def main(cfg):
         )
 
     # Check if model is compatible with data
-    sanity_checks(cfg, dataloader.dataset.max_sample_length)
+    if cfg.data.language != 'random':
+        sanity_checks(cfg, dataloader.dataset.max_sample_length)
 
     # Define model
-    model = GPT(cfg.model, dataloader.dataset.PCFG.vocab_size)
+    if cfg.data.language == 'random':
+        model = GPT(cfg.model, dataloader.dataset.num_features)
+    else:
+        model = GPT(cfg.model, dataloader.dataset.PCFG.vocab_size)
     model.to(device)
     if cfg.model.compile:
         model = torch.compile(model)
@@ -84,7 +88,7 @@ def train(cfg, model, dataloader, optimizer, device):
 
     # Initialize losses (NOTE: Records losses for each task token as well as the total loss)
     train_loss = {'total': []}
-    for k in dataloader.dataset.tasks_dict.keys():
+    for k in ['Task0']:
         train_loss[k] = []
     lr, it, save_tables = 0.0, 0, 0
     print("Total training steps: ", total_steps)
@@ -114,10 +118,13 @@ def train(cfg, model, dataloader, optimizer, device):
 
             # Task tokens
             # NOTE: Only free generation is implemented for now. Nothing needs to change here when other tasks are implemented though.
-            samples_per_task = {
-                k: inputs[:, 1] == dataloader.dataset.task_token_idx[k]
-                for k in dataloader.dataset.task_token_idx
-            }
+            if cfg.data.language == 'random':
+                samples_per_task = {'Task0': torch.ones(B, dtype=torch.bool)}
+            else:
+                samples_per_task = {
+                    k: inputs[:, 1] == dataloader.dataset.task_token_idx[k]
+                    for k in dataloader.dataset.task_token_idx
+                }
 
             # Sequence statistics to log as well
             train_lengths = {
@@ -136,8 +143,10 @@ def train(cfg, model, dataloader, optimizer, device):
 
                 # Grammaticality results
                 grammar_results_dict = grammar_evals(
-                    cfg=cfg, model=model, template=dataloader.dataset.template, 
-                    grammar=dataloader.dataset.PCFG, device=device,
+                    cfg=cfg, model=model,
+                    template=dataloader.dataset.template if cfg.data.language != 'random' else None, 
+                    grammar=dataloader.dataset.PCFG,
+                    device=device,
                     ) if cfg.eval.grammar else (None, None)
                 
                 # Log eval metrics
@@ -158,13 +167,13 @@ def train(cfg, model, dataloader, optimizer, device):
                     logits.reshape(-1, logits.size(-1)),
                     labels.reshape(-1),
                     # CORR: To allow us to avoid the replacement above.
-                    ignore_index=dataloader.dataset.pad_token_id,#-100,
+                    ignore_index=dataloader.dataset.pad_token_id if cfg.data.language == 'random' else -100,#-100,
                     reduction='none'
                     ) # (B*L-1)
                 loss = loss.reshape(B, -1).mean(dim=1) # Sum over sequence length
                 
                 # Decompose loss according to task tokens
-                for k in dataloader.dataset.task_tokens:
+                for k in ['Task0']:
                     train_loss[k].append(loss[samples_per_task[k]].mean().item())
 
                 loss = loss.mean() # Average loss

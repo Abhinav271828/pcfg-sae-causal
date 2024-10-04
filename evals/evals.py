@@ -21,7 +21,10 @@ def grammar_evals(cfg, model, template, grammar, device):
     with torch.no_grad():
 
         # Generate samples
-        inputs = template.repeat(eval_bsize, 1).to(device)
+        if template:
+            inputs = template.repeat(eval_bsize, 1).to(device)
+        else:
+            inputs = torch.zeros(eval_bsize, 1).to(device)
         samples, per_token_logprobs = model.sample(
             inputs=inputs, 
             max_new_tokens=cfg.data.max_sample_length - 10, 
