@@ -52,7 +52,7 @@ def main(cfg):
 
     # Define model
     if cfg.data.language == 'random':
-        model = GPT(cfg.model, dataloader.dataset.num_features)
+        model = GPT(cfg.model, dataloader.dataset.num_features + 2)
     else:
         model = GPT(cfg.model, dataloader.dataset.PCFG.vocab_size)
     model.to(device)
